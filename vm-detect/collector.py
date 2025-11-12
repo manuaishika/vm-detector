@@ -3,7 +3,6 @@ import json
 import subprocess
 import psutil
 import socket
-import netifaces
 import os
 import sys
 
@@ -59,24 +58,39 @@ def get_processes():
 def get_network_info():
     """Get MAC addresses and open connections (VMs have specific MAC vendors)."""
     net = {}
+    macs = []
+    
+    # Use psutil to get network interfaces and MAC addresses
     try:
-        addrs = netifaces.interfaces()
-        macs = []
-        for iface in addrs:
-            if netifaces.AF_LINK in netifaces.ifaddresses(iface):
-                mac = netifaces.ifaddresses(iface)[netifaces.AF_LINK][0]['addr']
-                if mac != '00:00:00:00:00:00':  # Skip invalid
-                    macs.append(mac)
-        net['mac_addresses'] = macs
+        if_addrs = psutil.net_if_addrs()
+        for iface_name, addrs in if_addrs.items():
+            for addr in addrs:
+                # psutil uses AF_LINK (-1 on Windows, 17 on Linux) for MAC addresses
+                # Check for AF_LINK family (MAC addresses)
+                if addr.family == -1 or addr.family == psutil.AF_LINK or (hasattr(psutil, 'AF_LINK') and addr.family == getattr(psutil, 'AF_LINK')):
+                    mac = addr.address.upper()
+                    # Skip invalid MACs
+                    if mac and mac != '00:00:00:00:00:00' and mac != '00-00-00-00-00-00':
+                        # Normalize MAC address format (replace hyphens with colons)
+                        mac = mac.replace('-', ':')
+                        # Validate MAC format (should be XX:XX:XX:XX:XX:XX)
+                        if len(mac) == 17 and mac.count(':') == 5:
+                            macs.append(mac)
+        net['mac_addresses'] = list(set(macs))  # Remove duplicates
     except Exception:
         net['mac_addresses'] = []
     
     # Open connections (e.g., RDP port 3389)
     connections = []
-    for conn in psutil.net_connections(kind='inet'):
-        if conn.status == 'LISTEN':
-            connections.append({'local': conn.laddr, 'remote': conn.raddr, 'pid': conn.pid})
-    net['listening_ports'] = [c['local'][1] for c in connections if c['local']]
+    try:
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.status == 'LISTEN' and conn.laddr:
+                connections.append({'local': conn.laddr, 'remote': conn.raddr, 'pid': conn.pid})
+        net['listening_ports'] = [c['local'][1] for c in connections if c['local']]
+    except (psutil.AccessDenied, AttributeError):
+        # On some systems, net_connections() requires elevated privileges
+        net['listening_ports'] = []
+    
     return net
 
 def get_session_info():
