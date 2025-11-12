@@ -1,0 +1,106 @@
+{
+  "vm_indicators": {
+    "bios_keywords": [
+      "vmware",
+      "vbox",
+      "virtualbox",
+      "qemu",
+      "kvm",
+      "hyper-v",
+      "microsoft hv",
+      "virtual machine",
+      "xen",
+      "parallels"
+    ],
+    "mac_vendors": [
+      "08:00:27",
+      "00:05:69",
+      "00:0c:29",
+      "00:1c:14",
+      "00:50:56",
+      "00:16:3e",
+      "00:1b:21"
+    ],
+    "processes": [
+      "vboxservice.exe",
+      "vmtoolsd.exe",
+      "vmwaretray.exe",
+      "vboxtray.exe",
+      "hypervvmservice.exe",
+      "vmwareuser.exe",
+      "vboxguest.exe",
+      "qemu-ga.exe",
+      "vmware.exe"
+    ],
+    "cpu_keywords": [
+      "virtual",
+      "qemu",
+      "vmware",
+      "kvm"
+    ]
+  },
+  "remote_indicators": {
+    "processes": [
+      "teamviewer.exe",
+      "anydesk.exe",
+      "tv_w32.exe",
+      "mstsc.exe",
+      "rdpclip.exe",
+      "vncserver.exe",
+      "vncviewer.exe",
+      "tvnserver.exe",
+      "ultravnc.exe",
+      "tightvnc.exe",
+      "logmein.exe",
+      "splashtop.exe",
+      "chrome_remote_desktop_host.exe",
+      "remotedesktopmanager.exe"
+    ],
+    "ports": [
+      3389,
+      5900,
+      5938,
+      7070,
+      5901,
+      5902,
+      4000,
+      5500
+    ],
+    "session_keywords": [
+      "rdp-tcp",
+      "rdp-tcp#",
+      "ssh_connection"
+    ]
+  },
+  "screen_share_indicators": {
+    "processes": [
+      "zoom.exe",
+      "obs64.exe",
+      "obs32.exe",
+      "meet.exe",
+      "discord.exe",
+      "teams.exe",
+      "skype.exe",
+      "webexmta.exe",
+      "gotomeeting.exe",
+      "screenflow.exe",
+      "camtasia.exe",
+      "fraps.exe",
+      "xsplit.exe"
+    ]
+  },
+  "weights": {
+    "bios_match": 0.4,
+    "mac_match": 0.3,
+    "process_match": 0.25,
+    "port_match": 0.15,
+    "session_match": 0.3,
+    "cpu_match": 0.2
+  },
+  "thresholds": {
+    "vm_confidence": 0.5,
+    "remote_confidence": 0.4,
+    "screen_share_confidence": 0.3
+  }
+}
+
