@@ -1,0 +1,74 @@
+[
+  {
+    "timestamp": "2025-11-13T11:00:18.755052",
+    "vm_detected": false,
+    "vm_confidence": 0.3,
+    "remote_access_detected": false,
+    "remote_access_confidence": 0.0,
+    "screen_share_detected": false,
+    "screen_share_confidence": 0.0,
+    "metrics": {
+      "cpu_percent": 35.6,
+      "cpu_count": 12,
+      "memory_total": 16876888064,
+      "memory_available": 1890693120,
+      "memory_percent": 88.8,
+      "disk_total": 510936477696,
+      "disk_free": 206505431040,
+      "disk_percent": 59.6,
+      "bytes_sent": 598897207,
+      "bytes_recv": 3429836004,
+      "process_count": 397,
+      "boot_time": 1762906542.7539904,
+      "uptime": 105276.00071525574
+    }
+  },
+  {
+    "timestamp": "2025-11-29T11:37:38.724052",
+    "vm_detected": false,
+    "vm_confidence": 0.3,
+    "remote_access_detected": false,
+    "remote_access_confidence": 0.0,
+    "screen_share_detected": false,
+    "screen_share_confidence": 0.0,
+    "metrics": {
+      "cpu_percent": 47.6,
+      "cpu_count": 12,
+      "memory_total": 16876888064,
+      "memory_available": 810385408,
+      "memory_percent": 95.2,
+      "disk_total": 510936477696,
+      "disk_free": 202088099840,
+      "disk_percent": 60.4,
+      "bytes_sent": 22382322,
+      "bytes_recv": 116649350,
+      "process_count": 415,
+      "boot_time": 1763474855.7228181,
+      "uptime": 921603.0009908676
+    }
+  },
+  {
+    "timestamp": "2025-11-29T11:38:10.924804",
+    "vm_detected": false,
+    "vm_confidence": 0.3,
+    "remote_access_detected": false,
+    "remote_access_confidence": 0.0,
+    "screen_share_detected": false,
+    "screen_share_confidence": 0.0,
+    "metrics": {
+      "cpu_percent": 68.8,
+      "cpu_count": 12,
+      "memory_total": 16876888064,
+      "memory_available": 1812905984,
+      "memory_percent": 89.3,
+      "disk_total": 510936477696,
+      "disk_free": 202073632768,
+      "disk_percent": 60.5,
+      "bytes_sent": 23014348,
+      "bytes_recv": 117001539,
+      "process_count": 410,
+      "boot_time": 1763474855.9242556,
+      "uptime": 921635.0002884865
+    }
+  }
+]

@@ -95,7 +95,9 @@
     "process_match": 0.25,
     "port_match": 0.15,
     "session_match": 0.3,
-    "cpu_match": 0.2
+    "cpu_match": 0.2,
+    "gpu_match": 0.3,
+    "timing_match": 0.25
   },
   "thresholds": {
     "vm_confidence": 0.5,
