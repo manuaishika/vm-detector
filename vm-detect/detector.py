@@ -127,26 +127,30 @@ class VMRemoteDetector:
         gpu_count = gpu_data.get("count", 0)
         gpu_devices = gpu_data.get("devices", [])
         
-        # Check for virtual GPU names
-        vm_gpu_keywords = ["vmware", "virtualbox", "virtual", "qxl", "vbox", "cirrus", "vga"]
+        # Check for virtual GPU names (strong indicator)
+        vm_gpu_keywords = ["vmware", "virtualbox", "virtual", "qxl", "vbox", "cirrus"]
         for device in gpu_devices:
             device_name = str(device).lower()
             if isinstance(device, dict):
                 device_name = str(device.get("name", "")).lower()
             for keyword in vm_gpu_keywords:
                 if keyword in device_name:
-                    score += self.weights.get("gpu_match", 0.3)
+                    score += self.weights.get("gpu_match", 0.15)
                     matches.append(f"GPU: {keyword} found in GPU name")
         
-        # Check for missing real GPU drivers
+        # Only flag missing GPU drivers if we have NO GPU info at all (weaker indicator)
+        # Don't flag if we just couldn't detect drivers - that's unreliable
         if platform.system().lower() == 'windows':
             nvidia_driver = gpu_data.get("nvidia_driver", False)
             amd_driver = gpu_data.get("amd_driver", False)
             intel_driver = gpu_data.get("intel_driver", False)
-            if not nvidia_driver and not amd_driver and not intel_driver and gpu_count == 0:
-                # Might be a VM with virtual GPU
-                score += self.weights.get("gpu_match", 0.2)
-                matches.append("GPU: No real GPU drivers detected (possible VM)")
+            gpu_processes = gpu_data.get("processes", [])
+            # Only flag if absolutely no GPU indicators AND we have GPU process checking enabled
+            if (not nvidia_driver and not amd_driver and not intel_driver and 
+                gpu_count == 0 and len(gpu_processes) == 0 and len(gpu_devices) == 0):
+                # Very weak indicator - reduce weight
+                score += self.weights.get("gpu_match", 0.15) * 0.5  # Half weight
+                matches.append("GPU: No GPU indicators detected (weak VM indicator)")
         
         return min(score, 1.0), matches
     
@@ -155,20 +159,21 @@ class VMRemoteDetector:
         score = 0.0
         matches = []
         
-        # VMs often have higher timing variance
+        # VMs often have higher timing variance, but this is a weak indicator
         variance = timing_data.get("variance", 0)
         std_dev = timing_data.get("std_dev", 0)
         avg_time = timing_data.get("avg_time", 0)
         
-        # High variance in timing can indicate VM
-        if variance > 0.5 and avg_time > 0:  # Threshold: 50% variance
-            score += self.weights.get("timing_match", 0.25)
-            matches.append(f"Timing: High variance detected ({variance:.2%}) - possible VM")
+        # Much higher threshold for timing variance - only flag extreme cases
+        # Real VMs can have 100-200%+ variance, normal systems can have 50-100%
+        if variance > 1.5 and avg_time > 0:  # Threshold: 150% variance (much higher)
+            score += self.weights.get("timing_match", 0.15)
+            matches.append(f"Timing: Very high variance detected ({variance:.2%}) - possible VM")
         
         # Check for odd CPU counts (VMs often have unusual configurations)
         odd_cpu_count = timing_data.get("odd_cpu_count", False)
         if odd_cpu_count:
-            score += self.weights.get("timing_match", 0.15)
+            score += self.weights.get("timing_match", 0.15) * 0.8  # Reduce weight
             matches.append("Timing: Unusual CPU count detected (possible VM)")
         
         # Check CPU frequency (VMs often report fixed or unusual frequencies)
@@ -178,8 +183,8 @@ class VMRemoteDetector:
         if cpu_freq > 0 and cpu_freq_min > 0 and cpu_freq_max > 0:
             # If frequency range is very small, might be a VM
             freq_range = cpu_freq_max - cpu_freq_min
-            if freq_range < 100:  # Less than 100 MHz range
-                score += self.weights.get("timing_match", 0.1)
+            if freq_range < 50:  # Less than 50 MHz range (stricter)
+                score += self.weights.get("timing_match", 0.15) * 0.7  # Reduce weight
                 matches.append("Timing: Fixed CPU frequency detected (possible VM)")
         
         return min(score, 1.0), matches
