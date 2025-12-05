@@ -48,7 +48,34 @@ def get_bios_info():
     return bios
 
 def get_processes():
-    """List running processes (look for VM/remote tools)."""
+    """List running processes (look for VM/remote tools) - optimized to only check suspicious ones."""
+    # Get list of suspicious processes from signatures (if available)
+    suspicious_processes = set()
+    try:
+        import json
+        with open('signatures.json', 'r') as f:
+            sigs = json.load(f)
+            # Collect all suspicious process names
+            suspicious_processes.update(sigs.get('vm_indicators', {}).get('processes', []))
+            suspicious_processes.update(sigs.get('remote_indicators', {}).get('processes', []))
+            suspicious_processes.update(sigs.get('screen_share_indicators', {}).get('processes', []))
+            suspicious_processes = {p.lower() for p in suspicious_processes}
+    except:
+        pass
+    
+    # Only check for suspicious processes (much faster)
+    found_processes = []
+    if suspicious_processes:
+        for proc in psutil.process_iter(['name']):
+            try:
+                proc_name = proc.info['name'].lower()
+                if proc_name in suspicious_processes:
+                    found_processes.append(proc_name)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        return found_processes
+    
+    # Fallback: get all processes if signatures not available
     processes = []
     for proc in psutil.process_iter(['pid', 'name']):
         try:
@@ -58,39 +85,42 @@ def get_processes():
     return processes
 
 def get_network_info():
-    """Get MAC addresses and open connections (VMs have specific MAC vendors)."""
+    """Get MAC addresses and open connections (VMs have specific MAC vendors) - optimized."""
     net = {}
     macs = []
     
-    # Use psutil to get network interfaces and MAC addresses
+    # Use psutil to get network interfaces and MAC addresses (cached in practice)
     try:
         if_addrs = psutil.net_if_addrs()
         for iface_name, addrs in if_addrs.items():
             for addr in addrs:
-                # psutil uses AF_LINK (-1 on Windows, 17 on Linux) for MAC addresses
-                # Check for AF_LINK family (MAC addresses)
-                if addr.family == -1 or addr.family == psutil.AF_LINK or (hasattr(psutil, 'AF_LINK') and addr.family == getattr(psutil, 'AF_LINK')):
-                    mac = addr.address.upper()
-                    # Skip invalid MACs
-                    if mac and mac != '00:00:00:00:00:00' and mac != '00-00-00-00-00-00':
-                        # Normalize MAC address format (replace hyphens with colons)
-                        mac = mac.replace('-', ':')
-                        # Validate MAC format (should be XX:XX:XX:XX:XX:XX)
-                        if len(mac) == 17 and mac.count(':') == 5:
-                            macs.append(mac)
-        net['mac_addresses'] = list(set(macs))  # Remove duplicates
+                if addr.family == -1 or addr.family == psutil.AF_LINK:
+                    mac = addr.address.upper().replace('-', ':')
+                    if mac and mac != '00:00:00:00:00:00' and len(mac) == 17 and mac.count(':') == 5:
+                        macs.append(mac)
+        net['mac_addresses'] = list(set(macs))
     except Exception:
         net['mac_addresses'] = []
     
-    # Open connections (e.g., RDP port 3389)
-    connections = []
+    # Only check suspicious ports (much faster)
+    suspicious_ports = set()
+    try:
+        import json
+        with open('signatures.json', 'r') as f:
+            sigs = json.load(f)
+            suspicious_ports = set(sigs.get('remote_indicators', {}).get('ports', []))
+    except:
+        suspicious_ports = {3389, 5900, 5938, 7070}  # Fallback common ports
+    
+    listening_ports = []
     try:
         for conn in psutil.net_connections(kind='inet'):
             if conn.status == 'LISTEN' and conn.laddr:
-                connections.append({'local': conn.laddr, 'remote': conn.raddr, 'pid': conn.pid})
-        net['listening_ports'] = [c['local'][1] for c in connections if c['local']]
+                port = conn.laddr[1]
+                if port in suspicious_ports:  # Only check suspicious ports
+                    listening_ports.append(port)
+        net['listening_ports'] = listening_ports
     except (psutil.AccessDenied, AttributeError):
-        # On some systems, net_connections() requires elevated privileges
         net['listening_ports'] = []
     
     return net
@@ -194,28 +224,25 @@ def get_gpu_info():
     return gpu
 
 def get_timing_info():
-    """Get CPU timing information (can detect hypervisors through timing anomalies)."""
+    """Get CPU timing information (can detect hypervisors through timing anomalies) - optimized."""
     timing = {}
     
     try:
-        # Method 1: RDTSC (Read Time-Stamp Counter) timing test
-        # VMs often have inconsistent timing
-        iterations = 100
+        # Optimized: Use fewer iterations (25 instead of 100) for faster detection
+        # Still accurate enough for VM detection
+        iterations = 25  # Reduced from 100 to 25 (4x faster)
         times = []
         
         for _ in range(iterations):
             start = time.perf_counter()
-            # Do a small computation
             _ = sum(range(100))
             end = time.perf_counter()
-            times.append((end - start) * 1e6)  # Convert to microseconds
+            times.append((end - start) * 1e6)
         
         timing['min_time'] = min(times)
         timing['max_time'] = max(times)
         timing['avg_time'] = sum(times) / len(times)
         timing['std_dev'] = (sum((x - timing['avg_time'])**2 for x in times) / len(times)) ** 0.5
-        
-        # VMs often have higher variance in timing
         timing['variance'] = timing['std_dev'] / timing['avg_time'] if timing['avg_time'] > 0 else 0
         
         # Method 2: CPU frequency detection
