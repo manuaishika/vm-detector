@@ -146,10 +146,12 @@ class VMRemoteDetector:
             intel_driver = gpu_data.get("intel_driver", False)
             gpu_processes = gpu_data.get("processes", [])
             # Only flag if absolutely no GPU indicators AND we have GPU process checking enabled
+            # Make this even weaker - only flag if we're certain it's suspicious
+            # Many physical machines don't expose GPU info properly
             if (not nvidia_driver and not amd_driver and not intel_driver and 
                 gpu_count == 0 and len(gpu_processes) == 0 and len(gpu_devices) == 0):
-                # Very weak indicator - reduce weight
-                score += self.weights.get("gpu_match", 0.15) * 0.5  # Half weight
+                # Very weak indicator - reduce weight significantly (don't flag on physical machines)
+                score += self.weights.get("gpu_match", 0.15) * 0.2  # Only 20% of weight (was 50%)
                 matches.append("GPU: No GPU indicators detected (weak VM indicator)")
         
         return min(score, 1.0), matches
@@ -166,8 +168,9 @@ class VMRemoteDetector:
         
         # Much higher threshold for timing variance - only flag extreme cases
         # Real VMs can have 100-200%+ variance, normal systems can have 50-100%
-        if variance > 1.5 and avg_time > 0:  # Threshold: 150% variance (much higher)
-            score += self.weights.get("timing_match", 0.15)
+        # Many physical machines also show high variance due to background processes
+        if variance > 2.0 and avg_time > 0:  # Threshold: 200% variance (even higher to reduce false positives)
+            score += self.weights.get("timing_match", 0.15) * 0.8  # Reduce weight slightly
             matches.append(f"Timing: Very high variance detected ({variance:.2%}) - possible VM")
         
         # Check for odd CPU counts (VMs often have unusual configurations)
