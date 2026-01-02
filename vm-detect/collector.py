@@ -139,6 +139,92 @@ def get_network_info():
     
     return net
 
+def get_browser_connections():
+    """Check if browsers are actively connected to meeting domains (Google Meet, Zoom, Teams, etc.)."""
+    meeting_domains = []
+    browser_processes = set()
+    
+    try:
+        import json
+        with open('signatures.json', 'r') as f:
+            sigs = json.load(f)
+            browser_keywords = sigs.get('screen_share_indicators', {}).get('browser_keywords', [])
+            # Extract domains from keywords
+            for keyword in browser_keywords:
+                if 'google.com' in keyword.lower():
+                    meeting_domains.extend(['meet.google.com', 'google.com', 'googleapis.com', 'gstatic.com'])
+                elif 'zoom.us' in keyword.lower():
+                    meeting_domains.extend(['zoom.us', 'zoom.com', 'zoomgov.com'])
+                elif 'teams.microsoft.com' in keyword.lower():
+                    meeting_domains.extend(['teams.microsoft.com', 'microsoft.com', 'office.com'])
+                elif 'webex.com' in keyword.lower():
+                    meeting_domains.extend(['webex.com', 'cisco.com'])
+            
+            browser_processes.update(sigs.get('screen_share_indicators', {}).get('browser_processes', []))
+            browser_processes = {p.lower() for p in browser_processes}
+    except:
+        meeting_domains = ['meet.google.com', 'zoom.us', 'teams.microsoft.com', 'webex.com']
+        browser_processes = {'chrome.exe', 'msedge.exe', 'firefox.exe'}
+    
+    active_meetings = set()
+    
+    try:
+        # Get all network connections
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.status in ['ESTABLISHED', 'SYN_SENT', 'SYN_RECV'] and conn.raddr:
+                try:
+                    # Try to get process info for this connection
+                    if hasattr(conn, 'pid') and conn.pid:
+                        proc = psutil.Process(conn.pid)
+                        proc_name = proc.name().lower()
+                        
+                        if proc_name in browser_processes:
+                            # Check if connected to meeting domain
+                            # Note: raddr is usually IP, we'd need reverse DNS, but we check process
+                            # For now, if browser is making connections, it might be in a meeting
+                            # We'll use a more reliable method: check if browser has many active connections
+                            pass
+                except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                    pass
+    except (psutil.AccessDenied, AttributeError):
+        pass
+    
+    # Alternative approach: Check if browsers have active network activity
+    # Count active connections per browser process
+    browser_connection_counts = {}
+    try:
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                proc_name = proc.info['name'].lower()
+                if proc_name in browser_processes:
+                    try:
+                        conns = proc.connections(kind='inet')
+                        active_conns = [c for c in conns if c.status in ['ESTABLISHED', 'SYN_SENT']]
+                        if active_conns:
+                            browser_connection_counts[proc_name] = browser_connection_counts.get(proc_name, 0) + len(active_conns)
+                    except (psutil.AccessDenied, AttributeError):
+                        pass
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except:
+        pass
+    
+    # If browsers have many active connections, likely in a meeting
+    # Meeting apps maintain multiple connections (audio, video, signaling)
+    meeting_browsers = set()
+    for browser, conn_count in browser_connection_counts.items():
+        if conn_count > 5:  # Meetings typically have 5+ active connections
+            meeting_browsers.add(browser)
+            # Try to identify which meeting service
+            for keyword in ['meet.google.com', 'zoom.us', 'teams.microsoft.com', 'webex.com']:
+                active_meetings.add(keyword)
+    
+    return {
+        'active_meeting_browsers': list(meeting_browsers),
+        'detected_meeting_domains': list(active_meetings) if active_meetings else [],
+        'browser_connection_counts': browser_connection_counts
+    }
+
 def get_session_info():
     """Check for remote sessions (e.g., RDP env vars)."""
     session = {}
@@ -335,6 +421,7 @@ def collect_all():
         'gpu': get_gpu_info(),
         'timing': get_timing_info(),
         'metrics': get_system_metrics(),
+        'browser_connections': get_browser_connections(),
     }
     return data
 

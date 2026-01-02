@@ -276,19 +276,30 @@ class VMRemoteDetector:
                 elif f"{browser.lower()}_screenshare" == process_name:
                     found_browser_screenshare.add(browser.lower())
         
-        # If browser is confirmed doing screen sharing (via command line check)
-        if found_browser_screenshare:
-            browser_score = 0.25 * len(found_browser_screenshare)  # Higher confidence
-            score += min(browser_score, 0.5)
+        # Check for active meeting connections (most reliable indicator)
+        browser_conns = system_data.get("browser_connections", {})
+        active_meeting_browsers = browser_conns.get("active_meeting_browsers", [])
+        detected_domains = browser_conns.get("detected_meeting_domains", [])
+        
+        if active_meeting_browsers:
+            # High confidence - browsers have active meeting connections
+            meeting_score = 0.4  # High weight for active connections
+            score += meeting_score
+            for browser in active_meeting_browsers:
+                domain_list = ', '.join(detected_domains) if detected_domains else "meeting service"
+                matches.append(f"Active meeting detected in {browser} (connected to {domain_list})")
+        elif found_browser_screenshare:
+            # Medium confidence - browser command line suggests meeting
+            browser_score = 0.25 * len(found_browser_screenshare)
+            score += min(browser_score, 0.35)
             for browser in found_browser_screenshare:
-                matches.append(f"Browser screen sharing detected: {browser} (Google Meet/Zoom/etc)")
+                matches.append(f"Browser meeting detected: {browser} (Google Meet/Zoom/etc)")
         elif found_browsers:
-            # Browsers running but not confirmed screen sharing - lower weight
-            # Cap browser score to avoid multiple Chrome processes inflating it
-            browser_score = 0.15 * len(found_browsers)  # Lower weight, deduplicated
-            score += min(browser_score, 0.3)  # Cap at 0.3
+            # Lower confidence - browsers running but not confirmed meeting
+            browser_score = 0.1 * len(found_browsers)  # Lower weight
+            score += min(browser_score, 0.2)  # Cap at 0.2
             for browser in found_browsers:
-                matches.append(f"Browser detected: {browser} (may indicate browser-based screen sharing)")
+                matches.append(f"Browser detected: {browser} (may indicate meeting/screen sharing)")
         
         return min(score, 1.0), matches
     
