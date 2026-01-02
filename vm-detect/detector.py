@@ -256,12 +256,41 @@ class VMRemoteDetector:
     
     def detect_screen_share(self, system_data: Dict) -> Tuple[float, List[str]]:
         """Detect if screen sharing software is active."""
-        screen_processes = self.signatures.get("screen_share_indicators", {}).get("processes", [])
+        screen_share_sigs = self.signatures.get("screen_share_indicators", {})
+        screen_processes = screen_share_sigs.get("processes", [])
+        
+        # Check for dedicated screen sharing apps
         score, matches = self._check_processes(
             screen_processes,
             system_data.get("processes", [])
         )
-        return score, matches
+        
+        # Check for browsers (might be doing screen sharing)
+        browser_processes = screen_share_sigs.get("browser_processes", [])
+        found_browsers = set()  # Use set to deduplicate
+        found_browser_screenshare = set()
+        for process_name in system_data.get("processes", []):
+            for browser in browser_processes:
+                if browser.lower() == process_name:
+                    found_browsers.add(browser.lower())
+                elif f"{browser.lower()}_screenshare" == process_name:
+                    found_browser_screenshare.add(browser.lower())
+        
+        # If browser is confirmed doing screen sharing (via command line check)
+        if found_browser_screenshare:
+            browser_score = 0.25 * len(found_browser_screenshare)  # Higher confidence
+            score += min(browser_score, 0.5)
+            for browser in found_browser_screenshare:
+                matches.append(f"Browser screen sharing detected: {browser} (Google Meet/Zoom/etc)")
+        elif found_browsers:
+            # Browsers running but not confirmed screen sharing - lower weight
+            # Cap browser score to avoid multiple Chrome processes inflating it
+            browser_score = 0.15 * len(found_browsers)  # Lower weight, deduplicated
+            score += min(browser_score, 0.3)  # Cap at 0.3
+            for browser in found_browsers:
+                matches.append(f"Browser detected: {browser} (may indicate browser-based screen sharing)")
+        
+        return min(score, 1.0), matches
     
     def analyze(self, system_data: Dict = None) -> Dict:
         """Perform full analysis of system data."""

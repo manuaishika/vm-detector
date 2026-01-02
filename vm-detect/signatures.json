@@ -87,6 +87,17 @@
       "camtasia.exe",
       "fraps.exe",
       "xsplit.exe"
+    ],
+    "browser_processes": [
+      "chrome.exe",
+      "msedge.exe",
+      "firefox.exe"
+    ],
+    "browser_keywords": [
+      "meet.google.com",
+      "zoom.us",
+      "webex.com",
+      "teams.microsoft.com"
     ]
   },
   "weights": {
@@ -102,7 +113,7 @@
   "thresholds": {
     "vm_confidence": 0.6,
     "remote_confidence": 0.4,
-    "screen_share_confidence": 0.3
+    "screen_share_confidence": 0.25
   }
 }
 

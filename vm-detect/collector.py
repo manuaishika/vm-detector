@@ -51,6 +51,8 @@ def get_processes():
     """List running processes (look for VM/remote tools) - optimized to only check suspicious ones."""
     # Get list of suspicious processes from signatures (if available)
     suspicious_processes = set()
+    browser_processes = set()
+    browser_keywords = []
     try:
         import json
         with open('signatures.json', 'r') as f:
@@ -60,17 +62,29 @@ def get_processes():
             suspicious_processes.update(sigs.get('remote_indicators', {}).get('processes', []))
             suspicious_processes.update(sigs.get('screen_share_indicators', {}).get('processes', []))
             suspicious_processes = {p.lower() for p in suspicious_processes}
+            # Also collect browser processes for screen sharing detection
+            browser_processes.update(sigs.get('screen_share_indicators', {}).get('browser_processes', []))
+            browser_processes = {p.lower() for p in browser_processes}
+            browser_keywords = sigs.get('screen_share_indicators', {}).get('browser_keywords', [])
     except:
         pass
     
     # Only check for suspicious processes (much faster)
     found_processes = []
-    if suspicious_processes:
-        for proc in psutil.process_iter(['name']):
+    if suspicious_processes or browser_processes:
+        for proc in psutil.process_iter(['name', 'cmdline']):
             try:
                 proc_name = proc.info['name'].lower()
                 if proc_name in suspicious_processes:
                     found_processes.append(proc_name)
+                elif proc_name in browser_processes:
+                    # Check if browser command line contains screen sharing keywords
+                    cmdline = ' '.join(proc.info.get('cmdline', [])).lower()
+                    if any(keyword.lower() in cmdline for keyword in browser_keywords):
+                        found_processes.append(f"{proc_name}_screenshare")
+                    else:
+                        # Browser running but not necessarily screen sharing - note it anyway
+                        found_processes.append(proc_name)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         return found_processes
