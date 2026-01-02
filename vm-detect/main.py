@@ -39,6 +39,8 @@ def monitor_continuous(interval: int = 5, output_file: str = None, quiet: bool =
                 alerts.append(f"REMOTE ACCESS DETECTED (confidence: {result['remote_access_confidence']:.2%})")
             if result["screen_share_detected"]:
                 alerts.append(f"SCREEN SHARE DETECTED (confidence: {result['screen_share_confidence']:.2%})")
+            if result.get("proxy_firewall_detected"):
+                alerts.append(f"PROXY/FIREWALL/VPN DETECTED (confidence: {result.get('proxy_firewall_confidence', 0):.2%})")
             
             # Print alerts
             if alerts:
@@ -59,6 +61,10 @@ def monitor_continuous(interval: int = 5, output_file: str = None, quiet: bool =
                         print("  Screen Share Evidence:")
                         for match in result["screen_share_matches"]:
                             print(f"    - {match}")
+                    if result.get("proxy_firewall_matches"):
+                        print("  Proxy/Firewall/VPN Evidence:")
+                        for match in result.get("proxy_firewall_matches", []):
+                            print(f"    - {match}")
                     print()  # Add blank line after details
             elif not quiet:
                 print(f"[{timestamp}] ✓ No threats detected")
@@ -73,10 +79,13 @@ def monitor_continuous(interval: int = 5, output_file: str = None, quiet: bool =
                     "remote_access_confidence": result["remote_access_confidence"],
                     "screen_share_detected": result["screen_share_detected"],
                     "screen_share_confidence": result["screen_share_confidence"],
+                    "proxy_firewall_detected": result.get("proxy_firewall_detected", False),
+                    "proxy_firewall_confidence": result.get("proxy_firewall_confidence", 0),
                     "matches": {
                         "vm": result["vm_matches"],
                         "remote": result["remote_access_matches"],
-                        "screen_share": result["screen_share_matches"]
+                        "screen_share": result["screen_share_matches"],
+                        "proxy_firewall": result.get("proxy_firewall_matches", [])
                     }
                 }
                 log_file.write(json.dumps(log_entry) + "\n")

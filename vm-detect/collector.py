@@ -415,6 +415,181 @@ def get_system_metrics():
     
     return metrics
 
+def get_proxy_firewall_info():
+    """Check for proxy servers, firewalls, and VPN connections."""
+    info = {
+        'proxy_detected': False,
+        'proxy_processes': [],
+        'proxy_settings': {},
+        'firewall_detected': False,
+        'firewall_processes': [],
+        'firewall_enabled': False,
+        'vpn_detected': False,
+        'vpn_processes': [],
+        'vpn_adapters': []
+    }
+    
+    # Proxy/VPN/Firewall process names to check
+    proxy_processes = [
+        'proxifier.exe', 'proxycap.exe', 'shadowsocks.exe', 'v2ray.exe',
+        'clash.exe', 'trojan.exe', 'brook.exe', 'ss-local.exe',
+        'proxychains.exe', 'privoxy.exe', 'squid.exe', '3proxy.exe'
+    ]
+    
+    vpn_processes = [
+        'openvpn.exe', 'nordvpn.exe', 'expressvpn.exe', 'surfshark.exe',
+        'protonvpn.exe', 'mullvad.exe', 'windscribe.exe', 'cyberghost.exe',
+        'tunnelbear.exe', 'privateinternetaccess.exe', 'vpn.exe',
+        'wireguard.exe', 'strongvpn.exe', 'hotspotshield.exe',
+        'softether.exe', 'cisco anyconnect.exe', 'forticlient.exe',
+        'pulse secure.exe', 'globalprotect.exe', 'f5 bigip.exe'
+    ]
+    
+    firewall_processes = [
+        'windows defender firewall.exe', 'wf.msc', 'mpcmdrun.exe',
+        'norton firewall.exe', 'mcafee firewall.exe', 'kaspersky firewall.exe',
+        'bitdefender firewall.exe', 'eset firewall.exe', 'avast firewall.exe',
+        'avg firewall.exe', 'comodo firewall.exe', 'zonealarm.exe',
+        'tinywall.exe', 'peerblock.exe', 'glasswire.exe', 'wfc.exe'
+    ]
+    
+    # Check for proxy/VPN/firewall processes
+    try:
+        for proc in psutil.process_iter(['name']):
+            try:
+                proc_name = proc.info['name'].lower()
+                
+                if proc_name in [p.lower() for p in proxy_processes]:
+                    info['proxy_detected'] = True
+                    if proc_name not in info['proxy_processes']:
+                        info['proxy_processes'].append(proc_name)
+                
+                if proc_name in [p.lower() for p in vpn_processes]:
+                    info['vpn_detected'] = True
+                    if proc_name not in info['vpn_processes']:
+                        info['vpn_processes'].append(proc_name)
+                
+                if proc_name in [p.lower() for p in firewall_processes]:
+                    info['firewall_detected'] = True
+                    if proc_name not in info['firewall_processes']:
+                        info['firewall_processes'].append(proc_name)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception:
+        pass
+    
+    # Check system proxy settings (Windows)
+    if platform.system().lower() == 'windows':
+        try:
+            import winreg
+            HAS_WINREG = True
+        except ImportError:
+            HAS_WINREG = False
+        
+        if HAS_WINREG:
+            # Check registry for proxy settings
+            try:
+                # Internet Settings proxy
+                key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+                )
+                proxy_enable = winreg.QueryValueEx(key, "ProxyEnable")[0]
+                if proxy_enable:
+                    info['proxy_detected'] = True
+                    try:
+                        proxy_server = winreg.QueryValueEx(key, "ProxyServer")[0]
+                        info['proxy_settings']['http_proxy'] = proxy_server
+                    except:
+                        pass
+                    try:
+                        proxy_override = winreg.QueryValueEx(key, "ProxyOverride")[0]
+                        info['proxy_settings']['proxy_override'] = proxy_override
+                    except:
+                        pass
+                winreg.CloseKey(key)
+            except Exception:
+                pass
+            
+            # Check Windows Firewall status
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['netsh', 'advfirewall', 'show', 'allprofiles', 'state'],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                if 'ON' in result.stdout.upper():
+                    info['firewall_enabled'] = True
+                    info['firewall_detected'] = True
+            except Exception:
+                pass
+    
+    # Check environment variables for proxy settings
+    proxy_env_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 
+                      'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
+    for var in proxy_env_vars:
+        value = os.getenv(var)
+        if value:
+            info['proxy_detected'] = True
+            info['proxy_settings'][var.lower()] = value
+    
+    # Check for VPN network adapters (Windows)
+    if platform.system().lower() == 'windows':
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['ipconfig', '/all'],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            # Look for VPN adapter keywords
+            vpn_keywords = ['tap', 'tun', 'ppp', 'vpn', 'openvpn', 'nordvpn', 
+                           'expressvpn', 'wireguard', 'strongvpn', 'protonvpn']
+            output_lower = result.stdout.lower()
+            for keyword in vpn_keywords:
+                if keyword in output_lower:
+                    info['vpn_detected'] = True
+                    # Try to extract adapter name
+                    lines = result.stdout.split('\n')
+                    for i, line in enumerate(lines):
+                        if keyword in line.lower() and 'adapter' in line.lower():
+                            if i + 1 < len(lines):
+                                info['vpn_adapters'].append(lines[i+1].strip())
+                    break
+        except Exception:
+            pass
+    
+    # Linux/Mac proxy check
+    else:
+        proxy_env = os.getenv('http_proxy') or os.getenv('HTTP_PROXY') or \
+                   os.getenv('https_proxy') or os.getenv('HTTPS_PROXY')
+        if proxy_env:
+            info['proxy_detected'] = True
+            info['proxy_settings']['env_proxy'] = proxy_env
+        
+        # Check for VPN interfaces (Linux)
+        if platform.system().lower() == 'linux':
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['ip', 'link', 'show'],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                vpn_keywords = ['tun', 'tap', 'ppp', 'vpn', 'wireguard', 'wg']
+                for keyword in vpn_keywords:
+                    if keyword in result.stdout.lower():
+                        info['vpn_detected'] = True
+                        break
+            except Exception:
+                pass
+    
+    return info
+
 def collect_all():
     """Main function: Gather everything into a dict."""
     data = {
@@ -427,6 +602,7 @@ def collect_all():
         'timing': get_timing_info(),
         'metrics': get_system_metrics(),
         'browser_connections': get_browser_connections(),
+        'proxy_firewall': get_proxy_firewall_info(),
     }
     return data
 

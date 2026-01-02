@@ -291,6 +291,51 @@ class VMRemoteDetector:
         
         return min(total_score, 1.0), all_matches
     
+    def detect_proxy_firewall(self, system_data: Dict) -> Tuple[float, List[str]]:
+        """Detect proxy servers, firewalls, and VPN connections."""
+        score = 0.0
+        matches = []
+        
+        proxy_fw = system_data.get("proxy_firewall", {})
+        
+        # Check for proxy
+        if proxy_fw.get("proxy_detected", False):
+            score += 0.4  # High weight - proxies can hide remote access
+            proxy_procs = proxy_fw.get("proxy_processes", [])
+            proxy_settings = proxy_fw.get("proxy_settings", {})
+            if proxy_procs:
+                matches.append(f"Proxy detected: {', '.join(proxy_procs)}")
+            elif proxy_settings:
+                matches.append(f"Proxy settings detected: {', '.join(proxy_settings.keys())}")
+            else:
+                matches.append("Proxy detected (system settings)")
+        
+        # Check for VPN
+        if proxy_fw.get("vpn_detected", False):
+            score += 0.35  # High weight - VPN can hide remote access
+            vpn_procs = proxy_fw.get("vpn_processes", [])
+            vpn_adapters = proxy_fw.get("vpn_adapters", [])
+            if vpn_procs:
+                matches.append(f"VPN detected: {', '.join(vpn_procs)}")
+            elif vpn_adapters:
+                matches.append(f"VPN adapter detected: {', '.join(vpn_adapters)}")
+            else:
+                matches.append("VPN detected (network adapter)")
+        
+        # Check for firewall (lower weight - firewalls are common and legitimate)
+        if proxy_fw.get("firewall_detected", False):
+            score += 0.15  # Lower weight - firewalls are normal
+            fw_procs = proxy_fw.get("firewall_processes", [])
+            fw_enabled = proxy_fw.get("firewall_enabled", False)
+            if fw_procs:
+                matches.append(f"Firewall software detected: {', '.join(fw_procs)}")
+            elif fw_enabled:
+                matches.append("Windows Firewall is enabled")
+            else:
+                matches.append("Firewall detected")
+        
+        return min(score, 1.0), matches
+    
     def detect_screen_share(self, system_data: Dict) -> Tuple[float, List[str]]:
         """Detect if screen sharing software is active."""
         screen_share_sigs = self.signatures.get("screen_share_indicators", {})
@@ -353,10 +398,12 @@ class VMRemoteDetector:
         vm_score, vm_matches = self.detect_vm(system_data)
         remote_score, remote_matches = self.detect_remote_access(system_data)
         screen_score, screen_matches = self.detect_screen_share(system_data)
+        proxy_fw_score, proxy_fw_matches = self.detect_proxy_firewall(system_data)
         
         vm_threshold = self.thresholds.get("vm_confidence", 0.5)
         remote_threshold = self.thresholds.get("remote_confidence", 0.4)
         screen_threshold = self.thresholds.get("screen_share_confidence", 0.3)
+        proxy_fw_threshold = self.thresholds.get("proxy_firewall_confidence", 0.3)
         
         result = {
             "vm_detected": vm_score >= vm_threshold,
@@ -368,6 +415,9 @@ class VMRemoteDetector:
             "screen_share_detected": screen_score >= screen_threshold,
             "screen_share_confidence": screen_score,
             "screen_share_matches": screen_matches,
+            "proxy_firewall_detected": proxy_fw_score >= proxy_fw_threshold,
+            "proxy_firewall_confidence": proxy_fw_score,
+            "proxy_firewall_matches": proxy_fw_matches,
             "system_data": system_data
         }
         
@@ -406,6 +456,17 @@ class VMRemoteDetector:
                 lines.append(f"  - {match}")
         else:
             lines.append(f"\n[OK] No screen sharing detected (confidence: {result['screen_share_confidence']:.2%})")
+        
+        if result.get("proxy_firewall_detected"):
+            lines.append(f"\n[ALERT] Proxy/Firewall/VPN Detected!")
+            lines.append(f"Confidence: {result.get('proxy_firewall_confidence', 0):.2%}")
+            lines.append("Evidence:")
+            for match in result.get("proxy_firewall_matches", []):
+                lines.append(f"  - {match}")
+        else:
+            proxy_fw_confidence = result.get("proxy_firewall_confidence", 0)
+            if proxy_fw_confidence > 0:
+                lines.append(f"\n[OK] No proxy/firewall/VPN detected (confidence: {proxy_fw_confidence:.2%})")
         
         lines.append("\n" + "=" * 60)
         return "\n".join(lines)
