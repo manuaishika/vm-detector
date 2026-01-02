@@ -157,7 +157,25 @@ class VMRemoteDetector:
         return min(score, 1.0), matches
     
     def _check_timing_anomalies(self, timing_data: Dict) -> Tuple[float, List[str]]:
-        """Check CPU timing for hypervisor artifacts."""
+        """
+        Check CPU timing for hypervisor artifacts.
+        
+        NOTE: Timing-based detection is unreliable on physical machines due to:
+        - Background processes affecting CPU timing
+        - Power management/throttling
+        - OS scheduler interference
+        - Measurement noise
+        
+        This method uses very conservative thresholds to minimize false positives.
+        For production use, timing should only be used as a secondary confirmation
+        when other indicators are already present.
+        
+        FUTURE IMPROVEMENTS:
+        - Multiple measurement samples with statistical analysis
+        - Pattern detection (consistent timing anomalies vs. random variance)
+        - Comparison against baseline measurements
+        - More sophisticated CPU feature detection (RDTSC, hypervisor bit, etc.)
+        """
         score = 0.0
         matches = []
         
@@ -165,30 +183,43 @@ class VMRemoteDetector:
         variance = timing_data.get("variance", 0)
         std_dev = timing_data.get("std_dev", 0)
         avg_time = timing_data.get("avg_time", 0)
+        min_time = timing_data.get("min_time", 0)
+        max_time = timing_data.get("max_time", 0)
         
-        # Much higher threshold for timing variance - only flag extreme cases
-        # Real VMs can have 100-200%+ variance, normal systems can have 50-100%
-        # Many physical machines also show high variance due to background processes
-        if variance > 2.0 and avg_time > 0:  # Threshold: 200% variance (even higher to reduce false positives)
-            score += self.weights.get("timing_match", 0.15) * 0.8  # Reduce weight slightly
-            matches.append(f"Timing: Very high variance detected ({variance:.2%}) - possible VM")
+        # VERY conservative threshold - only flag extreme, consistent anomalies
+        # Physical machines can show 200-300%+ variance due to background processes
+        # Only flag if variance is extremely high AND we see consistent patterns
+        if variance > 3.0 and avg_time > 0:  # Threshold: 300% variance (very conservative)
+            # Additional check: verify it's not just measurement noise
+            if min_time > 0 and max_time > 0:
+                # Check if variance is consistent (not just a single outlier)
+                time_range_ratio = (max_time - min_time) / avg_time if avg_time > 0 else 0
+                if time_range_ratio > 2.5:  # Consistent high variance
+                    score += self.weights.get("timing_match", 0.15) * 0.6  # Reduced weight
+                    matches.append(f"Timing: Extremely high variance detected ({variance:.2%}) - possible VM")
         
         # Check for odd CPU counts (VMs often have unusual configurations)
+        # This is more reliable than variance
         odd_cpu_count = timing_data.get("odd_cpu_count", False)
-        if odd_cpu_count:
-            score += self.weights.get("timing_match", 0.15) * 0.8  # Reduce weight
-            matches.append("Timing: Unusual CPU count detected (possible VM)")
+        cpu_count = timing_data.get("cpu_count", 0)
+        if odd_cpu_count and cpu_count > 1:
+            # Only flag if it's truly unusual (e.g., prime numbers > 1, or very small counts)
+            # Skip common physical configurations like 1, 2, 4, 8 cores
+            if cpu_count not in [1, 2, 4, 6, 8, 12, 16, 24, 32]:
+                score += self.weights.get("timing_match", 0.15) * 0.5  # Reduced weight
+                matches.append(f"Timing: Unusual CPU count detected ({cpu_count} cores) - possible VM")
         
         # Check CPU frequency (VMs often report fixed or unusual frequencies)
+        # This is more reliable than variance
         cpu_freq = timing_data.get("cpu_freq_current", 0)
         cpu_freq_min = timing_data.get("cpu_freq_min", 0)
         cpu_freq_max = timing_data.get("cpu_freq_max", 0)
         if cpu_freq > 0 and cpu_freq_min > 0 and cpu_freq_max > 0:
             # If frequency range is very small, might be a VM
             freq_range = cpu_freq_max - cpu_freq_min
-            if freq_range < 50:  # Less than 50 MHz range (stricter)
-                score += self.weights.get("timing_match", 0.15) * 0.7  # Reduce weight
-                matches.append("Timing: Fixed CPU frequency detected (possible VM)")
+            if freq_range < 10:  # Less than 10 MHz range (very strict - VMs often fixed)
+                score += self.weights.get("timing_match", 0.15) * 0.5  # Reduced weight
+                matches.append(f"Timing: Fixed CPU frequency detected ({cpu_freq:.0f} MHz, range: {freq_range:.1f} MHz) - possible VM")
         
         return min(score, 1.0), matches
     
@@ -223,10 +254,13 @@ class VMRemoteDetector:
         total_score += gpu_score
         all_matches.extend(gpu_matches)
         
-        # Check timing anomalies
-        timing_score, timing_matches = self._check_timing_anomalies(system_data.get("timing", {}))
-        total_score += timing_score
-        all_matches.extend(timing_matches)
+        # Check timing anomalies (only if other indicators suggest VM to reduce false positives)
+        # Timing is unreliable alone, but can confirm other indicators
+        if total_score > 0.2:  # Only check timing if we already have some VM indicators
+            timing_score, timing_matches = self._check_timing_anomalies(system_data.get("timing", {}))
+            total_score += timing_score
+            all_matches.extend(timing_matches)
+        # If no other indicators, skip timing check to avoid false positives
         
         return min(total_score, 1.0), all_matches
     
@@ -279,18 +313,23 @@ class VMRemoteDetector:
                 elif f"{browser.lower()}_screenshare" == process_name:
                     found_browser_screenshare.add(browser.lower())
         
-        # Check for active meeting connections (most reliable indicator)
+        # Check for active meeting connections (high connection count)
         browser_conns = system_data.get("browser_connections", {})
         active_meeting_browsers = browser_conns.get("active_meeting_browsers", [])
         detected_domains = browser_conns.get("detected_meeting_domains", [])
+        connection_counts = browser_conns.get("browser_connection_counts", {})
         
         if active_meeting_browsers:
-            # High confidence - browsers have active meeting connections
-            meeting_score = 0.4  # High weight for active connections
+            # Medium confidence - browsers have high connection counts (could be meeting or heavy browsing)
+            # Reduce weight since this can have false positives
+            meeting_score = 0.25  # Reduced from 0.4 to account for false positives
             score += meeting_score
             for browser in active_meeting_browsers:
-                domain_list = ', '.join(detected_domains) if detected_domains else "meeting service"
-                matches.append(f"Active meeting detected in {browser} (connected to {domain_list})")
+                conn_count = connection_counts.get(browser, 0)
+                if detected_domains and "high_connection_count" in detected_domains:
+                    matches.append(f"High connection count in {browser} ({conn_count} connections - possible meeting)")
+                else:
+                    matches.append(f"High connection count in {browser} ({conn_count} connections - possible meeting)")
         elif found_browser_screenshare:
             # Medium confidence - browser command line suggests meeting
             browser_score = 0.25 * len(found_browser_screenshare)

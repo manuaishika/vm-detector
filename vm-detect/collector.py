@@ -209,15 +209,20 @@ def get_browser_connections():
     except:
         pass
     
-    # If browsers have many active connections, likely in a meeting
-    # Meeting apps maintain multiple connections (audio, video, signaling)
+    # If browsers have many active connections, might be in a meeting
+    # BUT: Chrome can have 10-20+ connections from normal browsing (tabs, extensions, sync)
+    # Meetings typically have 15-30+ connections (audio, video, signaling, data channels)
+    # Use a higher threshold to reduce false positives
     meeting_browsers = set()
     for browser, conn_count in browser_connection_counts.items():
-        if conn_count > 5:  # Meetings typically have 5+ active connections
+        # Require significantly more connections than normal browsing
+        # Normal browsing: 5-15 connections
+        # Active meeting: 20-50+ connections
+        if conn_count >= 20:  # Much higher threshold to avoid false positives
             meeting_browsers.add(browser)
-            # Try to identify which meeting service
-            for keyword in ['meet.google.com', 'zoom.us', 'teams.microsoft.com', 'webex.com']:
-                active_meetings.add(keyword)
+            # Note: We can't reliably identify which meeting service without DNS lookup
+            # So we just note that browser has high connection count
+            active_meetings.add("high_connection_count")
     
     return {
         'active_meeting_browsers': list(meeting_browsers),

@@ -113,7 +113,7 @@
   "thresholds": {
     "vm_confidence": 0.6,
     "remote_confidence": 0.4,
-    "screen_share_confidence": 0.25
+    "screen_share_confidence": 0.3
   }
 }
 

@@ -319,12 +319,12 @@ Indicators: Application processes
 
 ### Detection Limitations
 
-- Cannot detect browser-based screen sharing (Chrome tab sharing)
+- Cannot detect browser-based screen sharing (Chrome tab sharing) without active network connections
 - Cannot detect VPN-encrypted remote access (tunneled connections)
 - Cannot detect kernel-level process hiding
 - Cannot detect custom VMs with all artifacts removed
 - GPU detection can have false positives on systems without dedicated GPU
-- Timing analysis can be affected by high system load
+- Timing analysis can be affected by high system load and background processes (mitigated: timing checks only run when other VM indicators are present)
 
 ### Evasion Resistance
 
@@ -450,6 +450,37 @@ Edit `signatures.json`:
 - Increase weight for more reliable indicators
 - Decrease weight for less reliable indicators
 - Adjust thresholds based on false positive/negative rates
+
+## Future Improvements
+
+The following enhancements are planned for future versions:
+
+1. **Enhanced Timing Detection**:
+   - Multiple measurement samples with statistical analysis
+   - Pattern detection (consistent anomalies vs. random variance)
+   - Baseline comparison against known-good measurements
+   - CPU feature detection (RDTSC behavior, hypervisor bit, etc.)
+   - Machine learning to distinguish VM timing patterns from physical machine noise
+
+2. **Network Traffic Analysis**:
+   - Deep packet inspection for encrypted meeting protocols
+   - Traffic pattern analysis (packet sizes, timing patterns)
+   - DNS query monitoring for meeting domain lookups
+
+3. **Advanced Process Detection**:
+   - Window title analysis for browser-based meetings
+   - Process tree analysis (parent-child relationships)
+   - Memory scanning for known signatures
+
+4. **Hardware Fingerprinting**:
+   - More sophisticated BIOS/UEFI analysis
+   - Hardware component enumeration
+   - CPUID instruction analysis
+
+5. **Machine Learning**:
+   - Train models on known VM vs. physical machine datasets
+   - Behavioral analysis over time
+   - Adaptive threshold adjustment
 
 ## License
 
