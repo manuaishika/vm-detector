@@ -14,8 +14,6 @@ register("nt.mac_firecracker", "network", "Firecracker-style locally-administere
          {"vm": 0.7}, "Assign non-default guest MACs.")
 register("nt.mac_docker", "network", "Docker bridge MAC (02:42:..)", {"container": 0.6},
          "Use host or macvlan networking, or a non-default MAC.")
-register("nt.iface_container", "network", "veth*/docker*/br-* interface names", {"container": 0.5},
-         "Rename interfaces inside the namespace.")
 register("nt.hostname_random_hex", "network", "Hostname is 12 hex chars (docker default)",
          {"container": 0.4, "staged": 0.3}, "Give sandboxes a realistic hostname.")
 register("nt.hostname_generic", "network", "Hostname is a placeholder (vm/localhost/sandbox/…)",
@@ -49,11 +47,10 @@ def fire(obs):
             hits.append(Hit("nt.mac_oui_vm", f"{i['name']} {mac} ({VM_OUI[mac[:8]]})"))
         if re.match(r"^(02|aa):fc:00", mac):
             hits.append(Hit("nt.mac_firecracker", f"{i['name']} {mac}"))
-        if mac.startswith("02:42:"):
+        if mac.startswith("02:42:") and not re.match(r"^(docker|br-|veth|cni)", i["name"]):  # host-side bridges
             hits.append(Hit("nt.mac_docker", f"{i['name']} {mac}"))
-    names = [i["name"] for i in obs.get("ifaces", []) if re.match(r"^(veth|docker|br-|cni)", i["name"])]
-    if names:
-        hits.append(Hit("nt.iface_container", f"interfaces {names}"))
+    # veth*/docker0/br-* interfaces mean this machine *hosts* containers, not that we are inside one
+    # (measured: starting dockerd on a VM made the VM itself look like a container), so no tell here.
     h = obs.get("hostname") or ""
     if re.fullmatch(r"[0-9a-f]{12}", h):
         hits.append(Hit("nt.hostname_random_hex", h))

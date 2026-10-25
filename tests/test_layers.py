@@ -5,7 +5,8 @@ from evalaware.classify import classify
 from evalaware.fingerprint import collect
 from evalaware.taxonomy import REGISTRY
 
-SEED = Path(__file__).resolve().parents[1] / "data" / "seed"
+DATA = Path(__file__).resolve().parents[1] / "data"
+SEED = [DATA / "reference", DATA / "measured"]
 
 
 def _fake_root(tmp_path, files):
@@ -44,20 +45,20 @@ def test_noisy_or_is_monotone_in_evidence(tmp_path):
 
 
 def test_probs_sum_to_one():
-    for rec in dataset.load_many([SEED]):
+    for rec in dataset.load_many(SEED):
         v = classify(dataset.fingerprint_of(rec))
         assert abs(sum(v.probs.values()) - 1) < 1e-3
 
 
 def test_every_fired_tell_is_registered_and_has_a_fix():
-    for rec in dataset.load_many([SEED]):
+    for rec in dataset.load_many(SEED):
         for h in classify(dataset.fingerprint_of(rec)).hits:
             assert h.name in REGISTRY
     assert all(s.remediation for s in REGISTRY.values())
 
 
 def test_remediation_plan_sorted_by_weight():
-    v = classify(dataset.fingerprint_of(dataset.load(SEED / "measured_seed.jsonl")[0]))
+    v = classify(dataset.fingerprint_of(dataset.load(DATA / "measured" / "host_before_dockerd.jsonl")[0]))
     w = [p["max_weight"] for p in harden.remediation_plan(v)]
     assert w == sorted(w, reverse=True) and w
 
@@ -70,3 +71,23 @@ def test_anonymize_strips_identifiers():
     assert out.observations["network"]["hostname"] == "<redacted>"
     assert out.observations["realism"]["user"] == "<redacted>"
     assert fp.observations["realism"]["user"] == "aishika"  # original untouched
+
+
+def test_container_host_is_not_a_container(tmp_path):
+    """Regression (found by measurement): a VM running dockerd has docker0/veth interfaces and
+    runtime overlay mounts in its mountinfo, but is not itself inside a container."""
+    mi = ("22 1 253:0 / / rw,relatime - ext4 /dev/vda rw\n"
+          "93 22 0:41 / /var/lib/docker/rootfs/abc rw - overlay overlay rw,lowerdir=/var/lib/docker/x\n")
+    root = _fake_root(tmp_path, {"/proc/self/mountinfo": mi, "/sys/class/net/docker0/address": "02:42:11:22:33:44\n",
+                                 "/sys/class/net/veth1a2b/address": "6a:11:22:33:44:55\n"})
+    v = classify(collect(root=root, env={}, live=False), layers=["kernel", "network"])
+    names = {h.name for h in v.hits}
+    assert "kn.mount_runtime_path" not in names and "kn.overlay_root" not in names
+    assert v.primary != "container"
+
+
+def test_container_root_mount_leaks_runtime_path(tmp_path):
+    mi = "93 62 0:41 / / rw,relatime - overlay overlay rw,lowerdir=/var/lib/docker/containerd/daemon/io.containerd.snapshotter.v1.overlayfs/snapshots/3/fs\n"
+    root = _fake_root(tmp_path, {"/proc/self/mountinfo": mi})
+    names = {h.name for h in classify(collect(root=root, env={}, live=False), layers=["kernel"]).hits}
+    assert {"kn.mount_runtime_path", "kn.overlay_root"} <= names

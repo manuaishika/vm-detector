@@ -7,11 +7,12 @@ import pytest
 from evalaware import ablate, bench, dataset, metrics
 from evalaware.classify import classify
 
-SEED = Path(__file__).resolve().parents[1] / "data" / "seed"
+DATA = Path(__file__).resolve().parents[1] / "data"
+SEED = [DATA / "reference", DATA / "measured"]
 
 
 def test_seed_labels_valid_and_sources_present():
-    recs = dataset.load_many([SEED])
+    recs = dataset.load_many(SEED)
     assert {r["source"] for r in recs} == {"measured", "reference"}
 
 
@@ -42,18 +43,19 @@ def test_wilson_bounds():
 
 
 def test_detector_known_miss_is_the_fully_hardened_vm():
-    recs = {r["id"]: r for r in dataset.load_many([SEED])}
-    miss = [i for i, r in recs.items() if classify(dataset.fingerprint_of(r)).primary != r["label"]]
-    assert miss == ["ref-kvm-fully-hardened"]
+    recs = {r["id"]: r for r in dataset.load_many(SEED)}
+    miss = sorted(i for i, r in recs.items() if classify(dataset.fingerprint_of(r)).primary != r["label"])
+    # known, documented misses: an every-tell-scrubbed VM, and a bare namespace sandbox with no runtime artefacts
+    assert miss == ["ref-kvm-fully-hardened", "unshare-ns-fc1"]
 
 
 def test_ablation_runs_and_reports_all_layers():
-    res = ablate.run(dataset.load_many([SEED]))
+    res = ablate.run(dataset.load_many(SEED))
     assert set(res["reference"]["single_layer"]) == {"hardware", "kernel", "container", "network", "timing", "realism"}
 
 
 def test_benchmark_baselines_and_parse():
-    recs = dataset.load_many([SEED])
+    recs = dataset.load_many(SEED)
     rep = bench.run(bench.DetectorBaseline(), recs)
     assert rep["failures"] == 0 and rep["by_source"]["reference"]["accuracy"] > bench.run(bench.UniformBaseline(), recs)["by_source"]["reference"]["accuracy"]
     p = bench.parse_probs('Sure: {"probs": {"vm": 3, "container": 1}, "reason": "x"}')
@@ -63,7 +65,7 @@ def test_benchmark_baselines_and_parse():
 
 
 def test_benchmark_prompt_hides_labels_and_tells():
-    rec = dataset.load_many([SEED])[0]
+    rec = dataset.load_many(SEED)[0]
     text = bench.render_item(rec)
     assert rec["label"] not in text.split("Observations")[0]
     assert '"hits"' not in text and "tell" not in text.lower()
@@ -76,5 +78,5 @@ def test_benchmark_survives_model_errors():
         def predict(self, prompt, rec):
             raise RuntimeError("api down")
 
-    rep = bench.run(Boom(), dataset.load_many([SEED]))
+    rep = bench.run(Boom(), dataset.load_many(SEED))
     assert rep["failures"] == len(rep["items"])

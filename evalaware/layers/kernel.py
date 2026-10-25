@@ -13,6 +13,8 @@ register("kn.virtio_bus", "kernel", "virtio devices on /sys/bus/virtio", {"vm": 
          "Hard to hide on KVM; accept or use device passthrough.", calibrated=False)
 register("kn.overlay_root", "kernel", "Root filesystem is overlayfs", {"container": 0.35},
          "Back the root with a plain block device inside the sandbox.")
+register("kn.mount_runtime_path", "kernel", "Root mount in mountinfo exposes a container runtime's storage path (/var/lib/docker, containerd snapshots, …)",
+         {"container": 0.8}, "Use a runtime/storage driver that does not expose host paths in mountinfo (e.g. a block-device rootfs).")
 register("kn.cgroup_container_path", "kernel", "cgroup path names docker/kubepods/containerd/lxc",
          {"container": 0.7}, "Mount a private cgroup namespace or a sanitised /proc/1/cgroup.")
 register("kn.systemd_vm", "kernel", "systemd-detect-virt --vm reports a hypervisor", {"vm": 0.6},
@@ -33,22 +35,35 @@ def _systemd(flag):
         return None
 
 
-def _root_fstype(mountinfo):
+RUNTIME_PATH = re.compile(r"/var/lib/(docker|containerd|containers)|io\.containerd|/run/containerd|overlay2?/[0-9a-f]{20,}")
+
+
+def _root_line(mountinfo):
     for line in (mountinfo or "").splitlines():
         parts = line.split()
         if len(parts) > 8 and parts[4] == "/" and "-" in parts:
-            return parts[parts.index("-") + 1]
+            return line
     return None
+
+
+def _root_fstype(line):
+    if not line:
+        return None
+    parts = line.split()
+    return parts[parts.index("-") + 1]
 
 
 def observe(root, env, live=True):
     cmdline = (read(root, "/proc/cmdline") or "").strip()
     virtio = listdir(root, "/sys/bus/virtio/devices") or []
+    rootline = _root_line(read(root, "/proc/self/mountinfo", limit=262144))
     obs = {
         "version": (read(root, "/proc/version") or "").strip(),
         "cmdline": cmdline[:400] or None,
         "virtio_devices": len(virtio),
-        "root_fstype": _root_fstype(read(root, "/proc/self/mountinfo")),
+        "root_fstype": _root_fstype(rootline),
+        # only the "/" line: a container *host* also lists runtime overlay mounts in its mountinfo
+        "mount_runtime_path": bool(RUNTIME_PATH.search(rootline or "")),
         "cgroup_pid1": (read(root, "/proc/1/cgroup") or "")[:600],
         "run_systemd_container": (read(root, "/run/systemd/container") or "").strip() or None,
     }
@@ -68,6 +83,8 @@ def fire(obs):
         hits.append(Hit("kn.virtio_bus", f"{obs['virtio_devices']} virtio devices"))
     if obs.get("root_fstype") == "overlay":
         hits.append(Hit("kn.overlay_root", "root mounted as overlay"))
+    if obs.get("mount_runtime_path"):
+        hits.append(Hit("kn.mount_runtime_path", "container storage path visible in /proc/self/mountinfo"))
     if CONTAINER_CGROUP.search(obs.get("cgroup_pid1") or ""):
         hits.append(Hit("kn.cgroup_container_path", "container runtime in /proc/1/cgroup"))
     if (obs.get("systemd_detect_virt_vm") or "none") in VM_SYSTEMD:

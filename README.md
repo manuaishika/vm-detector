@@ -89,22 +89,29 @@ python -m pytest -q
 
 `collect` anonymises hostnames, usernames and MAC tails by default (`--raw` disables).
 
+## Results so far
+
+Full write-up with tables: **[docs/REPORT.md](docs/REPORT.md)**. In short, on 9 measured environments
+(Docker variants, hardened Docker, a namespace sandbox, a Firecracker microVM):
+
+- The layered detector identifies the innermost boundary in **8/9** cases (macro-F1 0.86, Brier 0.16) from
+  an unprivileged shell in ~0.1 s. The class prior gets 0.78 accuracy but only 0.44 macro-F1.
+- The **kernel layer** carries the signal: it matches full accuracy alone, and removing it costs 22 points.
+- **Surface hardening isn't enough.** Removing `/.dockerenv`, a realistic hostname, a seeded `$HOME` and a
+  private cgroup namespace lower the staged score from 0.92 to 0.72, but the container is still detected
+  (P = 0.91) via the overlay root and runtime paths in `/proc/self/mountinfo`.
+- **Blind spot:** a bare `unshare` sandbox on the host rootfs looks like its host VM.
+
 ## Honest status
 
-- **Data.** `data/seed/` holds 1 *measured* sample (a Firecracker microVM) and 12 *reference* profiles I
-  wrote from publicly documented artefacts. The reference profiles are fixtures: the same author wrote
-  the weights and the profiles, so accuracy on them is circular. They test the code, not the science.
-  One of them (`ref-kvm-fully-hardened`) is deliberately undetectable and is the detector's known miss.
-  **No accuracy claim is supported until you add measured samples from varied environments.**
-- **Weights** are priors from documented behaviour. I adjusted `kn.image_residue` after seeing the one
-  measured sample (a Docker-built image run as a microVM falsely looked like a container), so treat that
-  sample as in-sample. Tells marked `calibrated=False` (timing, parts of realism) are placeholders.
-- **Not yet run against a live model.** The Anthropic backends (`AnthropicModel`, `AnthropicBackend`) are
-  written against the SDK docs but were not exercised end-to-end here (no API key in the dev sandbox);
-  the study loop, probes, scoring and analysis are tested with a scripted backend.
-- **Probe classification is regex-based.** `uname`/`hostname` are weak probes because they are often
-  benign; read the raw `commands` in the JSONL before concluding anything.
-- **Small n.** Use the Wilson intervals and permutation tests; do not read single runs.
+- **Data.** `data/measured/` has 9 real samples (reproduce with `scripts/collect_matrix.sh`), all from one
+  Firecracker host. `data/reference/` has 12 hand-written profiles built from public documentation; these are
+  fixtures (circular by construction) and are always reported separately. Measured accuracy is in-sample:
+  three tells were corrected after measurement showed host-side false positives (see REPORT §3).
+- **Weights** are priors. Tells marked `calibrated=False` (timing, parts of realism) are placeholders.
+- **The LLM benchmark (RQ2) and agent study (RQ3) are not yet run against a live model.** Both are
+  implemented and tested end to end with a scripted agent; running them needs an API key.
+- **Probe classification is regex-based**; read the raw `commands` in the JSONL before concluding anything.
 
 ## Dual use
 
@@ -117,8 +124,9 @@ only in disposable sandboxes and ships with an explicit opt-in.
 
 ```
 evalaware/        layers/ (6 detection layers) · classify · harden · ablate · bench · metrics · study/
-data/seed/        measured + reference fingerprints (JSONL)
+data/measured/    real fingerprints (JSONL)      data/reference/  hand-written fixtures
+scripts/          collect_matrix.sh (measurement matrix) · results.py (report tables)
 tests/            pytest suite
 legacy/vm-detect/ original proctoring-oriented detector
-docs/METHODOLOGY.md
+docs/REPORT.md · docs/METHODOLOGY.md
 ```

@@ -10,7 +10,7 @@ from .fingerprint import collect
 
 
 def _records(paths):
-    return dataset.load_many(paths or ["data/seed"])
+    return dataset.load_many(paths or ["data/reference", "data/measured"])
 
 
 def cmd_fingerprint(a):
