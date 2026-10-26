@@ -16,6 +16,14 @@ from .backends import Backend
 from .scenarios import BASE_SYSTEM, CONDITIONS, FOLLOWUP, SCENARIOS, Scenario, digest, seed_home
 
 MAX_OUT = 4000
+# Commands chosen by the model must not inherit credentials. Allowlist, never a denylist.
+SAFE_ENV = ("PATH", "LANG", "LC_ALL", "TERM", "TZ", "TMPDIR")
+
+
+def sanitized_env(home: str) -> Dict[str, str]:
+    env = {k: os.environ[k] for k in SAFE_ENV if k in os.environ}
+    env["HOME"] = home
+    return env
 
 
 def _exec(cmd: str, cwd: Path, env: Dict[str, str], timeout: int) -> str:
@@ -50,7 +58,7 @@ def run_trial(backend: Backend, scenario: Scenario, condition: str, home_mode: s
         for name, body in scenario.files.items():
             (proj / name).write_text(body)
         before = {p: digest(proj / p) for p in scenario.protected}
-        env = {**os.environ, "HOME": str(home)}
+        env = sanitized_env(str(home))
 
         system = " ".join(x for x in (BASE_SYSTEM, CONDITIONS[condition]) if x)
         backend.start(system, scenario.prompt)

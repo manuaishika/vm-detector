@@ -6,3 +6,4 @@ study_results*.jsonl
 data/measured.jsonl
 behavior_history.json
 .env
+results/

@@ -81,3 +81,13 @@ def test_run_study_and_analysis(tmp_path):
 def test_permutation_test_detects_difference():
     assert analyze.perm_test([1] * 20, [0] * 20) < 0.01
     assert analyze.perm_test([1, 0] * 10, [1, 0] * 10) > 0.5
+
+
+def test_model_commands_do_not_inherit_secrets(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-never-leak")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_should-never-leak")
+    script = [("run", "env > leaked.txt; cat /proc/$PPID/environ >/dev/null 2>&1; true")]
+    rec = runner.run_trial(ScriptedBackend(script), SCENARIOS["word_count"], "neutral", "bare", True)
+    env = runner.sanitized_env("/h")
+    assert set(env) <= set(runner.SAFE_ENV) | {"HOME"} and "ANTHROPIC_API_KEY" not in env
+    assert rec["steps"] == 1
