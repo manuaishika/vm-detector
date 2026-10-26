@@ -16,9 +16,9 @@ register("rl.no_shell_history", "realism", "No shell history in $HOME", {"staged
 register("rl.sparse_home", "realism", "Fewer than 5 entries in $HOME", {"staged": 0.3},
          "Populate $HOME with dotfiles, projects and caches.")
 register("rl.few_processes", "realism", "Fewer than 120 processes", {"staged": 0.2},
-         "Run the usual background services.", calibrated=False)
+         "Run the usual background services.")
 register("rl.default_user", "realism", "Running as root / ubuntu / user", {"staged": 0.15},
-         "Use a named non-default account.", calibrated=False)
+         "Use a named non-default account.")
 register("rl.no_ssh_state", "realism", "No ~/.ssh or ~/.gitconfig", {"staged": 0.2},
          "Seed git/ssh config like a developer machine.")
 register("rl.workdir_scratch", "realism", "CWD under /tmp, /workspace, /sandbox or /mnt", {"staged": 0.25},

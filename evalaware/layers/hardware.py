@@ -20,7 +20,7 @@ register("hw.cpu_hypervisor_flag", "hardware", "'hypervisor' bit in /proc/cpuinf
 register("hw.cpu_model_virtual", "hardware", "CPU model string is a virtual CPU", {"vm": 0.6},
          "Pass through the host CPU model instead of a generic virtual one.")
 register("hw.cpu_model_masked", "hardware", "Generic cloud CPU string without model number", {"vm": 0.2},
-         "Expose full CPU brand string.", calibrated=False)
+         "Expose full CPU brand string.")
 register("hw.hypervisor_sysfs", "hardware", "/sys/hypervisor exists", {"vm": 0.9},
          "Do not mount hypervisor sysfs into the guest.")
 

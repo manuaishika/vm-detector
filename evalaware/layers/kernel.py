@@ -10,7 +10,7 @@ register("kn.gvisor_banner", "kernel", "Fixed gVisor /proc/version banner", {"us
 register("kn.cmdline_vm_marker", "kernel", "Kernel cmdline mentions firecracker/virtio_mmio/pci=off/no_guest_*",
          {"vm": 0.5}, "Do not expose the real boot cmdline (/proc/cmdline) to the workload.")
 register("kn.virtio_bus", "kernel", "virtio devices on /sys/bus/virtio", {"vm": 0.6},
-         "Hard to hide on KVM; accept or use device passthrough.", calibrated=False)
+         "Hard to hide on KVM; accept or use device passthrough.")
 register("kn.overlay_root", "kernel", "Root filesystem is overlayfs", {"container": 0.35},
          "Back the root with a plain block device inside the sandbox.")
 register("kn.mount_runtime_path", "kernel", "Root mount in mountinfo exposes a container runtime's storage path (/var/lib/docker, containerd snapshots, …)",
@@ -20,7 +20,7 @@ register("kn.cgroup_container_path", "kernel", "cgroup path names docker/kubepod
 register("kn.systemd_vm", "kernel", "systemd-detect-virt --vm reports a hypervisor", {"vm": 0.6},
          "Hide the underlying DMI/CPUID evidence systemd uses.")
 register("kn.image_residue", "kernel", "/run/systemd/container left over from a container image build",
-         {"container": 0.2}, "Clean image-build residue before use.", calibrated=False)
+         {"container": 0.2}, "Clean image-build residue before use.")
 
 CONTAINER_CGROUP = re.compile(r"docker|kubepods|containerd|lxc|libpod|crio|garden", re.I)
 VM_SYSTEMD = {"kvm", "qemu", "vmware", "microsoft", "oracle", "xen", "bochs", "uml", "parallels",

@@ -10,8 +10,7 @@ def remediation_plan(v: Verdict):
     for h in v.hits:
         spec = REGISTRY[h.name]
         plan.append({"tell": h.name, "layer": spec.layer, "evidence": h.evidence,
-                     "max_weight": max(spec.votes.values()), "fix": spec.remediation or "(no known fix)",
-                     "calibrated": spec.calibrated})
+                     "max_weight": max(spec.votes.values()), "fix": spec.remediation or "(no known fix)"})
     return sorted(plan, key=lambda p: -p["max_weight"])
 
 

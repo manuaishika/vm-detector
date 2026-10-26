@@ -18,7 +18,6 @@ class TellSpec:
     description: str
     votes: Dict[str, float]  # boundary (or STAGED) -> weight in (0, 1)
     remediation: str = ""
-    calibrated: bool = True  # False: weight is a prior, not measured
 
 
 @dataclass
@@ -30,8 +29,8 @@ class Hit:
 REGISTRY: Dict[str, TellSpec] = {}
 
 
-def register(name, layer, description, votes, remediation="", calibrated=True) -> str:
-    REGISTRY[name] = TellSpec(name, layer, description, dict(votes), remediation, calibrated)
+def register(name, layer, description, votes, remediation="") -> str:
+    REGISTRY[name] = TellSpec(name, layer, description, dict(votes), remediation)
     return name
 
 

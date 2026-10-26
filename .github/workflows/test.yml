@@ -14,3 +14,4 @@ jobs:
       - run: pip install pytest
       - run: python -m pytest -q
       - run: python -m evalaware eval && python -m evalaware ablate && python -m evalaware bench
+      - run: python scripts/weights_report.py > /dev/null && python scripts/build_report.py

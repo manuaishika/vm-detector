@@ -42,11 +42,19 @@ def test_wilson_bounds():
     assert math.isnan(metrics.wilson(0, 0)[0])
 
 
-def test_detector_known_miss_is_the_fully_hardened_vm():
-    recs = {r["id"]: r for r in dataset.load_many(SEED)}
-    miss = sorted(i for i, r in recs.items() if classify(dataset.fingerprint_of(r)).primary != r["label"])
-    # known, documented misses: an every-tell-scrubbed VM, and a bare namespace sandbox with no runtime artefacts
-    assert miss == ["ref-kvm-fully-hardened", "unshare-ns-fc1"]
+def test_detector_known_misses_are_exactly_the_documented_ones():
+    """Misses are structural (no artefact to find, or a leftover marker file); anything new is a regression."""
+    recs = dataset.load_many(SEED)
+    miss = sorted({r["group"] for r in recs if classify(dataset.fingerprint_of(r)).primary != r["label"]})
+    assert miss == ["chroot-export", "ref-kvm-fully-hardened", "unshare-ns", "unshare-pid"]
+
+
+def test_measured_data_is_grouped_and_covers_docker_variants():
+    m = dataset.load_many([DATA / "measured"])
+    groups = {r["group"] for r in m}
+    assert len(groups) >= 15 and sum(g.startswith("docker-") for g in groups) >= 10
+    assert all(classify(dataset.fingerprint_of(r)).primary == "container"
+               for r in m if r["group"].startswith("docker-"))
 
 
 def test_ablation_runs_and_reports_all_layers():

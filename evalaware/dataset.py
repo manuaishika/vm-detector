@@ -23,6 +23,7 @@ def load(path) -> List[Dict]:
             rec = json.loads(line)
             if rec.get("label") not in CLASSES:
                 raise ValueError(f"{path}:{n}: label {rec.get('label')!r} not in {CLASSES}")
+            rec.setdefault("group", rec.get("id"))
             out.append(rec)
     return out
 
@@ -65,13 +66,15 @@ def anonymize(fp: Fingerprint) -> Fingerprint:
 
 
 def append(path, rec_id: str, label: str, fp: Fingerprint, source="measured", stack=None, notes="",
-           anonymise=True) -> Dict:
+           anonymise=True, group=None) -> Dict:
+    """`group` names the environment configuration; repeats of one config share it so cross-validation
+    can hold out whole configurations instead of leaking near-duplicates across folds."""
     if label not in CLASSES:
         raise ValueError(f"label must be one of {CLASSES}")
     if anonymise:
         fp = anonymize(fp)
     rec = {"id": rec_id, "label": label, "stack": stack or ([] if label == "bare_metal" else [label]),
-           "source": source, "notes": notes, "fingerprint": fp.to_dict()}
+           "source": source, "group": group or rec_id, "notes": notes, "fingerprint": fp.to_dict()}
     with open(path, "a") as f:
         f.write(json.dumps(rec) + "\n")
     return rec

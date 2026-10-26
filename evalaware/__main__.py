@@ -30,7 +30,7 @@ def cmd_harden(a):
 def cmd_collect(a):
     fp = collect()
     rec = dataset.append(a.out, a.id, a.label, fp, source="measured", stack=a.stack.split(",") if a.stack else None,
-                         notes=a.notes, anonymise=not a.raw)
+                         notes=a.notes, anonymise=not a.raw, group=a.group)
     print(f"appended {rec['id']} (label={a.label}) -> {a.out}")
     print(format_report(classify(fp)))
     return 0
@@ -98,7 +98,7 @@ def main(argv=None):
     s = sub.add_parser("collect", help="append a labelled measured fingerprint of this host to a dataset")
     s.add_argument("--label", required=True, choices=["bare_metal", "vm", "userspace_kernel", "container"])
     s.add_argument("--id", required=True); s.add_argument("--out", default="data/measured.jsonl")
-    s.add_argument("--stack", help="comma-separated outer->inner boundaries"); s.add_argument("--notes", default=""); s.add_argument("--raw", action="store_true", help="skip anonymisation (default strips hostname/user/MAC tail)"); s.set_defaults(f=cmd_collect)
+    s.add_argument("--stack", help="comma-separated outer->inner boundaries"); s.add_argument("--group", help="configuration name shared by repeats (for grouped CV)"); s.add_argument("--notes", default=""); s.add_argument("--raw", action="store_true", help="skip anonymisation (default strips hostname/user/MAC tail)"); s.set_defaults(f=cmd_collect)
     s = sub.add_parser("eval", help="detector accuracy per data source"); s.add_argument("data", nargs="*"); s.set_defaults(f=cmd_eval)
     s = sub.add_parser("ablate", help="per-layer ablation"); s.add_argument("data", nargs="*"); s.set_defaults(f=cmd_ablate)
     s = sub.add_parser("bench", help="Sandbox-ID benchmark (baselines + optional Claude models)")

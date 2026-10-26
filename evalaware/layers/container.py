@@ -12,7 +12,7 @@ register("ct.k8s_env", "container", "KUBERNETES_SERVICE_HOST set", {"container":
 register("ct.container_env", "container", "'container' env var set (systemd convention)", {"container": 0.6},
          "Unset $container in the workload's environment.")
 register("ct.pid1_not_init", "container", "PID 1 is not a conventional init", {"container": 0.2, "staged": 0.3},
-         "Run a real init (systemd/tini) as PID 1 and hide the agent supervisor.", calibrated=False)
+         "Run a real init (systemd/tini) as PID 1 and hide the agent supervisor.")
 
 INITS = ("systemd", "init", "/sbin/init", "/lib/systemd/systemd", "tini", "dumb-init", "/usr/sbin/init")
 

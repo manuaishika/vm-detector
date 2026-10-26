@@ -85,30 +85,38 @@ python -m evalaware harden                 # what gives it away, and the fix
 python -m evalaware collect --label container --id my-docker --out data/measured.jsonl   # add a labelled sample
 python -m evalaware eval && python -m evalaware ablate && python -m evalaware bench
 python -m pytest -q
+./scripts/collect_matrix.sh                # re-measure the Docker/unshare/chroot matrix (needs docker)
+python scripts/weights_report.py > docs/WEIGHTS.md && python scripts/build_report.py
 ```
 
 `collect` anonymises hostnames, usernames and MAC tails by default (`--raw` disables).
 
 ## Results so far
 
-Full write-up with tables: **[docs/REPORT.md](docs/REPORT.md)**. In short, on 9 measured environments
-(Docker variants, hardened Docker, a namespace sandbox, a Firecracker microVM):
+Full write-up: **[docs/REPORT.md](docs/REPORT.md)**. Why every weight is what it is, and how it holds up against data:
+**[docs/WEIGHTS.md](docs/WEIGHTS.md)**. In short, on 58 measured samples from 20 real configurations (14 Docker variants incl.
+3 hardened, `unshare` and chroot sandboxes, a Firecracker microVM):
 
-- The layered detector identifies the innermost boundary in **8/9** cases (macro-F1 0.86, Brier 0.16) from
-  an unprivileged shell in ~0.1 s. The class prior gets 0.78 accuracy but only 0.44 macro-F1.
-- The **kernel layer** carries the signal: it matches full accuracy alone, and removing it costs 22 points.
-- **Surface hardening isn't enough.** Removing `/.dockerenv`, a realistic hostname, a seeded `$HOME` and a
-  private cgroup namespace lower the staged score from 0.92 to 0.72, but the container is still detected
-  (P = 0.91) via the overlay root and runtime paths in `/proc/self/mountinfo`.
-- **Blind spot:** a bare `unshare` sandbox on the host rootfs looks like its host VM.
+- **Accuracy 0.84, macro-F1 0.76, balanced accuracy 0.79.** Accuracy alone is close to the class prior (0.83), because most
+  samples are containers; macro-F1 (prior 0.45) and per-class recall are the honest numbers.
+- **All 42 Docker samples are detected**, including hardened ones (P(container) ≥ 0.91).
+- **Misses are structural:** `unshare` sandboxes leave no runtime artefact (0/6), and a chroot of a `docker export` tree is
+  mistaken for a container because `/.dockerenv` survives (0/3).
+- **The kernel layer carries the signal** (0.79 alone; removing it costs 0.16); the container layer is net-negative on this data
+  because of that one marker file.
+- **Surface hardening isn't enough:** it cuts the staged score from 0.92 to 0.72 but the container is still detected
+  through the overlay root and runtime paths in `/proc/self/mountinfo`.
+- **Weights are not tuned numbers.** Tiered rubric with a written rationale per tell; results are flat under random perturbation of
+  every weight; a fitted model does not beat the priors under leave-one-configuration-out CV (0.72 vs 0.84).
 
 ## Honest status
 
-- **Data.** `data/measured/` has 9 real samples (reproduce with `scripts/collect_matrix.sh`), all from one
-  Firecracker host. `data/reference/` has 12 hand-written profiles built from public documentation; these are
-  fixtures (circular by construction) and are always reported separately. Measured accuracy is in-sample:
-  three tells were corrected after measurement showed host-side false positives (see REPORT §3).
-- **Weights** are priors. Tells marked `calibrated=False` (timing, parts of realism) are placeholders.
+- **Data.** `data/measured/` has 58 real samples from 20 configurations (reproduce with `scripts/collect_matrix.sh`), all
+  from one Firecracker host: no bare-metal and no gVisor sample, so the `vm` and `userspace_kernel` parts are untested on real
+  data. `data/reference/` has 12 hand-written profiles; these are fixtures (circular by construction) and are always reported
+  separately. Measured accuracy is in-sample: three tells were corrected after measurement showed host-side false positives.
+- **Weights** are priors set by a written rubric (`evalaware/rationale.py`, enforced by tests), then checked against the data in
+  WEIGHTS.md. The numbers predate the rubric; the rubric formalises them. The timing and several realism tells are weak and untested.
 - **The LLM benchmark (RQ2) and agent study (RQ3) are not yet run against a live model.** Both are
   implemented and tested end to end with a scripted agent; running them needs an API key.
 - **Probe classification is regex-based**; read the raw `commands` in the JSONL before concluding anything.
@@ -123,10 +131,10 @@ only in disposable sandboxes and ships with an explicit opt-in.
 ## Layout
 
 ```
-evalaware/        layers/ (6 detection layers) · classify · harden · ablate · bench · metrics · study/
+evalaware/        layers/ (6 detection layers) · classify · rationale · calibrate · harden · ablate · bench · metrics · study/
 data/measured/    real fingerprints (JSONL)      data/reference/  hand-written fixtures
 scripts/          collect_matrix.sh (measurement matrix) · results.py (report tables)
 tests/            pytest suite
 legacy/vm-detect/ original proctoring-oriented detector
-docs/REPORT.md · docs/METHODOLOGY.md
+docs/REPORT.md · docs/WEIGHTS.md · docs/METHODOLOGY.md
 ```

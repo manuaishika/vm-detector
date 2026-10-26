@@ -1,6 +1,6 @@
 """Layer 5 - timing side channels: syscall latency, tail jitter, timer overshoot.
 
-Weights here are priors, not measurements (calibrated=False); the ablation in
+Weights here are weak, uncalibrated priors (tier D/C, see docs/WEIGHTS.md); the ablation in
 `python -m evalaware ablate` is how they get checked against a labelled dataset.
 """
 
@@ -10,12 +10,11 @@ import time
 from ..taxonomy import Hit, register
 
 register("tm.slow_syscall", "timing", "Median getppid() latency > 1µs (user-space kernel / ptrace)",
-         {"userspace_kernel": 0.5}, "Use a KVM-backed runtime where syscalls do not leave the guest.",
-         calibrated=False)
+         {"userspace_kernel": 0.5}, "Use a KVM-backed runtime where syscalls do not leave the guest.")
 register("tm.tail_jitter", "timing", "p99/median syscall latency ratio is large", {"vm": 0.15},
-         "Pin vCPUs and reduce host contention.", calibrated=False)
+         "Pin vCPUs and reduce host contention.")
 register("tm.coarse_sleep", "timing", "1ms sleep overshoots by > 400µs on average", {"vm": 0.15},
-         "Use a high-resolution guest clocksource.", calibrated=False)
+         "Use a high-resolution guest clocksource.")
 
 
 def observe(root, env, budget_s=0.25):

@@ -17,9 +17,9 @@ register("nt.mac_docker", "network", "Docker bridge MAC (02:42:..)", {"container
 register("nt.hostname_random_hex", "network", "Hostname is 12 hex chars (docker default)",
          {"container": 0.4, "staged": 0.3}, "Give sandboxes a realistic hostname.")
 register("nt.hostname_generic", "network", "Hostname is a placeholder (vm/localhost/sandbox/…)",
-         {"staged": 0.3}, "Use a realistic hostname.", calibrated=False)
+         {"staged": 0.3}, "Use a realistic hostname.")
 register("nt.public_dns_only", "network", "Only public resolvers (8.8.8.8 etc.) configured", {"staged": 0.15},
-         "Use the resolver a real workstation/server would have.", calibrated=False)
+         "Use the resolver a real workstation/server would have.")
 
 
 def observe(root, env):

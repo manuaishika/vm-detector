@@ -47,8 +47,10 @@ def fire_all(fp: Fingerprint, layers: Optional[List[str]] = None) -> List[Hit]:
 
 
 def classify(fp: Fingerprint, layers: Optional[List[str]] = None,
-             weights: Optional[Dict[str, float]] = None) -> Verdict:
-    """`layers` restricts evidence to a subset (ablation); `weights` overrides tell weights by name."""
+             weights: Optional[Dict[str, float]] = None, threshold: float = PRESENT_THRESHOLD) -> Verdict:
+    """`layers` restricts evidence to a subset (ablation); `weights` overrides tell weights by name;
+    `threshold` is the boundary-score cut-off for listing a boundary in `stack` (class probabilities
+    and `primary` do not depend on it)."""
     hits = fire_all(fp, layers)
     votes: Dict[str, List[float]] = {b: [] for b in BOUNDARIES + (STAGED,)}
     for h in hits:
@@ -63,7 +65,7 @@ def classify(fp: Fingerprint, layers: Optional[List[str]] = None,
         "vm": sv * (1 - sc) * (1 - su),
         "bare_metal": (1 - sc) * (1 - su) * (1 - sv),
     }
-    stack = [b for b in BOUNDARIES if s[b] >= PRESENT_THRESHOLD]
+    stack = [b for b in BOUNDARIES if s[b] >= threshold]
     primary = max(CLASSES, key=lambda c: probs[c])
     return Verdict(primary, stack, {k: round(v, 4) for k, v in probs.items()},
                    {b: round(s[b], 4) for b in BOUNDARIES}, round(s[STAGED], 4), hits)
